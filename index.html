@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="广州塔交互式三维模型，可环绕查看钢结构、观景平台和天线桅杆。">
+<title>广州塔 · 三维建筑模型</title>
+<style>
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --page: #10141b;
+  --ink: #f2eee6;
+  --muted: #a4afbd;
+  --line: #303944;
+  --coral: #ffa487;
+  --mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); }
+button { font: inherit; cursor: pointer; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, canvas:focus-visible { outline: 2px solid #ffae93; outline-offset: 3px; }
+.shell { max-width: 1600px; margin: auto; padding: 0 38px 24px; }
+.masthead {
+  height: 71px; display: flex; align-items: center; justify-content: space-between;
+  text-transform: uppercase; letter-spacing: .15em; font-size: .82rem; color: #b9c2ce;
+}
+.masthead strong { display: flex; align-items: center; gap: 12px; color: #e7e4dd; font-size: .88rem; }
+.mark { width: 26px; height: 26px; position: relative; display: inline-grid; place-items: center; border: 1px solid #5f4944; border-radius: 50%; }
+.mark::before, .mark::after { content: ""; position: absolute; width: 8px; height: 14px; border-left: 1px solid #ffa487; border-right: 1px solid #ffa487; }
+.mark::before { transform: skewX(-21deg); }
+.mark::after { transform: skewX(21deg); }
+.masthead small { font-family: var(--mono); font-size: .78rem; }
+.layout { display: grid; grid-template-columns: minmax(260px, 305px) minmax(0, 1fr); gap: 32px; align-items: stretch; }
+.sidebar { padding: clamp(30px, 7vh, 79px) 5px 4px 0; display: flex; flex-direction: column; align-items: flex-start; }
+.place { display: flex; align-items: center; gap: 10px; color: var(--coral); margin: 0 0 20px; font-size: .88rem; letter-spacing: .1em; }
+.place::before { content: ""; width: 20px; height: 1px; background: var(--coral); }
+h1 { margin: 0; font-size: clamp(3.3rem, 5.3vw, 5.15rem); line-height: 1.15; font-weight: 800; letter-spacing: -.08em; white-space: nowrap; }
+.english { margin: 14px 0 0; font-family: var(--mono); color: #c2cbd8; letter-spacing: .2em; font-size: .91rem; }
+.intro { margin: 29px 0 25px; max-width: 16.5em; font-size: 1rem; line-height: 1.85; color: #bac2cf; }
+.specs { margin: 0; width: 100%; max-width: 267px; border-top: 1px solid var(--line); }
+.specs div { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 47px; border-bottom: 1px solid var(--line); }
+.specs dt { color: var(--muted); font-size: .9rem; }
+.specs dd { margin: 0; font: 500 1.15rem var(--mono); color: #efe9df; white-space: nowrap; }
+.specs dd span { font-size: .84rem; color: #bac4d0; }
+.credit { margin-top: auto; padding-top: 26px; font-size: .8rem; color: var(--muted); line-height: 1.65; }
+.credit a { color: #c4ccd7; text-underline-offset: 4px; }
+.credit p { margin: 4px 0 0; }
+.credit details { margin-top: 7px; }
+.credit summary { color: #c4ccd7; cursor: pointer; }
+.credit ul { padding-left: 1.2em; margin: 7px 0 0; }
+.stage {
+  --stage-ink: #e9eaf0;
+  --stage-muted: #b2c3d5;
+  --stage-line: #697b91;
+  --control: #151f2e;
+  --control-edge: #435067;
+  --selected: #ffc4aa;
+  --selected-bg: #49333b;
+  --grid: #7088a01b;
+  --sky: radial-gradient(ellipse at 49% 44%, #233c53 0%, #16263c 40%, #111b2b 73%, #101724 100%);
+  position: relative; isolation: isolate; overflow: hidden; border: 1px solid #364355; border-radius: 14px;
+  height: clamp(615px, calc(100svh - 98px), 940px); background: var(--sky); color: var(--stage-ink);
+}
+.stage[data-mode="day"] {
+  color-scheme: light; --stage-ink: #152f41; --stage-muted: #29485c; --stage-line: #466d84;
+  --control: #e5f0f5; --control-edge: #8faabb; --selected: #173a50; --selected-bg: #bad6e6;
+  --grid: #416e8622; --sky: radial-gradient(ellipse at 48% 51%, #f1f3e9 0%, #d5e7ec 42%, #a3c0d2 100%);
+}
+.stage[data-mode="structure"] {
+  --stage-ink: #e2f3ed; --stage-muted: #b4cbc7; --stage-line: #708d87;
+  --control: #152927; --control-edge: #42615d; --selected: #c8f6e7; --selected-bg: #265249;
+  --grid: #84ae9f21; --sky: radial-gradient(ellipse at 50% 48%, #24413c, #172a2b 58%, #122021 100%);
+}
+.stage::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 44px 44px; background-position: center 0;
+  mask-image: radial-gradient(ellipse at center, #000 5%, #0008 67%, transparent 94%);
+}
+#view { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#view:active { cursor: grabbing; }
+#view:focus-visible { outline-offset: -5px; border-radius: inherit; }
+.toolbar { position: absolute; z-index: 2; top: 18px; left: 18px; right: 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; pointer-events: none; }
+.group { display: flex; align-items: center; gap: 3px; padding: 3px; background: var(--control); border: 1px solid var(--control-edge); border-radius: 8px; pointer-events: auto; }
+.stage button { color: var(--stage-ink); background: transparent; border: 0; border-radius: 5px; min-width: 40px; min-height: 38px; padding: 4px 10px; font-size: .86rem; line-height: 1; white-space: nowrap; }
+.stage button:hover { background: var(--selected-bg); }
+.stage button[aria-pressed="true"] { background: var(--selected-bg); color: var(--selected); }
+.stage button:disabled { opacity: .47; cursor: default; }
+.stage .rotation { display: flex; align-items: center; gap: 6px; }
+.play { display: inline-grid; place-items: center; width: 12px; height: 13px; }
+.play::before { content: ""; width: 0; height: 0; border-block: 4px solid transparent; border-left: 6px solid currentColor; }
+[aria-pressed="true"] .play::before { width: 7px; height: 8px; border: 0; border-inline: 2px solid currentColor; }
+.divider { height: 16px; width: 1px; background: var(--control-edge); pointer-events: none; }
+.reset-icon { font-size: 1.26rem; line-height: .8; }
+.scale { position: absolute; left: 22px; inset-block: 0; width: 64px; pointer-events: none; }
+.tick {
+  position: absolute; top: 0; display: flex; align-items: center; gap: 7px; color: var(--stage-muted);
+  font: .75rem var(--mono); white-space: nowrap;
+}
+.tick::before { content: ""; width: 11px; height: 1px; background: var(--stage-line); }
+.landmarks { position: absolute; inset: 0; pointer-events: none; }
+.landmark { position: absolute; top: 0; left: 0; display: flex; align-items: center; color: var(--stage-muted); gap: 9px; white-space: nowrap; }
+.leader { width: clamp(24px, 4vw, 77px); height: 1px; background: var(--stage-line); }
+.leader::before { content: ""; float: left; width: 5px; height: 5px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--stage-muted); }
+.landmark > span:last-child { display: grid; gap: 4px; }
+.landmark strong { font-size: .88rem; font-weight: 600; color: var(--stage-ink); }
+.landmark small { font: .76rem var(--mono); }
+.interaction { position: absolute; bottom: 29px; left: 50%; transform: translateX(-50%); margin: 0; color: var(--stage-muted); font-size: .8rem; pointer-events: none; white-space: nowrap; }
+.stage:not([data-view="overview"]) .interaction { display: none; }
+.touch-hint { display: none; }
+.views { position: absolute; z-index: 2; left: 18px; bottom: 16px; }
+.zoom { position: absolute; z-index: 2; right: 18px; bottom: 16px; }
+.zoom button { font: 1.25rem var(--mono); }
+.fallback { position: absolute; inset: 20% 12%; display: grid; place-content: center; text-align: center; color: var(--stage-ink); line-height: 1.8; }
+[hidden] { display: none !important; }
+@media (pointer: coarse) {
+  .mouse-hint { display: none; }
+  .touch-hint { display: inline; }
+}
+@media (max-width: 1050px) {
+  .shell { padding-inline: 24px; }
+  .layout { grid-template-columns: 235px minmax(0, 1fr); gap: 22px; }
+  .interaction { left: 18px; bottom: 70px; transform: none; }
+}
+@media (max-width: 790px) {
+  .shell { padding: 0 14px 20px; }
+  .masthead { height: 52px; }
+  .masthead small { letter-spacing: .06em; }
+  .layout { display: flex; flex-direction: column; gap: 14px; }
+  .sidebar { display: contents; }
+  .heading { order: 0; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 3px 2px 2px; }
+  .place { display: none; }
+  h1 { font-size: clamp(2.35rem, 7vw, 3.5rem); }
+  .english { margin: 0; font-size: .78rem; letter-spacing: .115em; }
+  .stage { order: 1; height: clamp(470px, 68svh, 705px); border-radius: 11px; }
+  .intro { order: 2; margin: 2px 2px 0; max-width: none; }
+  .specs { order: 3; max-width: none; }
+  .credit { order: 4; padding-top: 0; }
+  .landmark .leader { width: 28px; }
+}
+@media (max-width: 560px) {
+  .toolbar { top: 10px; left: 10px; right: 10px; }
+  .stage button { padding-inline: 7px; min-width: 36px; }
+  .stage .rotation { gap: 3px; }
+  .scale { left: 13px; }
+  .tick { font-size: .71rem; gap: 5px; }
+  .tick::before { width: 7px; }
+  .landmarks { display: none; }
+  .interaction { left: 12px; bottom: 63px; }
+  .views { left: 10px; bottom: 10px; }
+  .zoom { right: 10px; bottom: 10px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead">
+    <strong><span class="mark" aria-hidden="true"></span>三维建筑模型</strong>
+    <small>GUANGZHOU · CN</small>
+  </header>
+  <main class="layout">
+    <section class="sidebar" aria-labelledby="title">
+      <div class="heading">
+        <p class="place">中国广州 · 珠江南岸</p>
+        <h1 id="title">广州塔</h1>
+        <p class="english" lang="en">CANTON TOWER</p>
+      </div>
+      <p class="intro">24 根斜柱围绕直立的混凝土核心筒，在约 280 米高处收成「小蛮腰」。五组楼层分段布置，塔腰保留了大片透空空间。</p>
+      <dl class="specs">
+        <div><dt>总高度</dt><dd>600 <span>m</span></dd></div>
+        <div><dt>主塔体 / 天线</dt><dd>454 <span>/</span> 146 <span>m</span></dd></div>
+        <div><dt>外筒钢柱</dt><dd>24 <span>根</span></dd></div>
+        <div><dt>斜环梁</dt><dd>46 <span>道 / 约</span> 15.5°</dd></div>
+      </dl>
+      <div class="credit">
+        <p>依据公开工程资料建模。环梁间距、幕墙分格和局部设施为近似。</p>
+        <details>
+          <summary>参考资料</summary>
+          <ul>
+            <li><a href="https://ira.lib.polyu.edu.hk/bitstream/10397/24216/1/Xia_deformation_monitoring.pdf" target="_blank" rel="noopener">香港理工大学 · 塔体结构与实测研究</a></li>
+            <li><a href="https://www.arup.com/globalassets/downloads/insights/a/arups-innovation-legacy/arup-innovation-legacy-chinese.pdf" target="_blank" rel="noopener">奥雅纳 · 广州塔设计</a></li>
+            <li><a href="https://patents.google.com/patent/CN105155904A/zh" target="_blank" rel="noopener">施工资料 · A–E 功能区标高</a></li>
+            <li><a href="https://patentimages.storage.googleapis.com/81/b5/13/64ea7ee513e0f8/CN201924636U.pdf" target="_blank" rel="noopener">结构专利 · 天线桅杆构造</a></li>
+            <li><a href="https://wglj.gz.gov.cn/ztmb/gzhyn/ajjq/4a/content/post_8928935.html" target="_blank" rel="noopener">广州市文广旅局 · 塔顶观景设施</a></li>
+          </ul>
+        </details>
+      </div>
+    </section>
+    <section class="stage" data-mode="night" data-view="overview" aria-label="广州塔三维模型查看器">
+      <canvas id="view" tabindex="0" aria-label="广州塔 3D 模型。方向键旋转视角，加号和减号缩放，Home 键重置。" aria-describedby="interaction"></canvas>
+      <div class="toolbar" id="toolbar">
+        <div class="group" role="group" aria-label="显示模式">
+          <button type="button" data-mode="night" aria-pressed="true">夜景</button>
+          <button type="button" data-mode="day" aria-pressed="false">日景</button>
+          <button type="button" data-mode="structure" aria-pressed="false">结构</button>
+        </div>
+        <div class="group" role="group" aria-label="视角控制">
+          <button type="button" id="rotate" class="rotation" aria-pressed="false"><span class="play" aria-hidden="true"></span>自动旋转</button>
+          <span class="divider" aria-hidden="true"></span>
+          <button type="button" id="reset" aria-label="重置视角" title="重置视角"><span class="reset-icon" aria-hidden="true">↺</span></button>
+        </div>
+      </div>
+      <div class="scale" aria-hidden="true">
+        <span class="tick" data-height="600">600 m</span>
+        <span class="tick" data-height="450">450</span>
+        <span class="tick" data-height="300">300</span>
+        <span class="tick" data-height="150">150</span>
+        <span class="tick" data-height="0">0</span>
+      </div>
+      <div class="landmarks" aria-hidden="true">
+        <div class="landmark" data-view="overview" data-height="574" data-part="mast"><span class="leader"></span><span><strong>天线桅杆</strong><small>146 m</small></span></div>
+        <div class="landmark" data-view="overview top" data-height="450" data-part="roof"><span class="leader"></span><span><strong>塔顶观景平台</strong><small>450 m</small></span></div>
+        <div class="landmark" data-view="overview waist" data-height="280" data-part="body"><span class="leader"></span><span><strong>小蛮腰</strong><small>约 280 m</small></span></div>
+        <div class="landmark" data-view="top" data-height="488" data-part="mast"><span class="leader"></span><span><strong>摄影观景平台</strong><small>488 m</small></span></div>
+        <div class="landmark" data-view="top" data-height="433" data-part="body"><span class="leader"></span><span><strong>星空观光大厅</strong><small>433 m</small></span></div>
+        <div class="landmark" data-view="waist" data-height="320" data-part="body"><span class="leader"></span><span><strong>空中云梯</strong><small>绕核心筒上升</small></span></div>
+      </div>
+      <p class="interaction" id="interaction">
+        <span class="mouse-hint">拖动旋转 · 滚轮缩放</span>
+        <span class="touch-hint">单指旋转 · 双指缩放</span>
+      </p>
+      <div class="group views" role="group" aria-label="观察部位">
+        <button type="button" data-view="overview" aria-pressed="true">全塔</button>
+        <button type="button" data-view="waist" aria-pressed="false">腰部</button>
+        <button type="button" data-view="top" aria-pressed="false">塔顶</button>
+      </div>
+      <div class="group zoom" id="zoom" role="group" aria-label="缩放控制">
+        <button type="button" id="zoom-out" aria-label="缩小" title="缩小">−</button>
+        <span class="divider" aria-hidden="true"></span>
+        <button type="button" id="zoom-in" aria-label="放大" title="放大">+</button>
+      </div>
+      <p class="fallback" id="fallback" role="status" hidden></p>
+    </section>
+  </main>
+</div>
+<script>
+"use strict";
+
+const canvas = document.querySelector("#view");
+const stage = document.querySelector(".stage");
+const fallback = document.querySelector("#fallback");
+
+function showError(message) {
+  fallback.textContent = message;
+  fallback.hidden = false;
+  for (const item of stage.querySelectorAll(".toolbar, .scale, .landmarks, .interaction, .views, .zoom")) {
+    item.hidden = true;
+  }
+}
+
+function startViewer(gl) {
+  const TAU = Math.PI * 2;
+  const towerHeight = 454;
+  const columnCount = 24;
+  const ringCount = 46;
+  const add = (a, b) => a.map((value, axis) => value + b[axis]);
+  const sub = (a, b) => a.map((value, axis) => value - b[axis]);
+  const mul = (a, factor) => a.map(value => value * factor);
+  const mix = (a, b, t) => a.map((value, axis) => value + (b[axis] - value) * t);
+  const dot = (a, b) => a.reduce((sum, value, axis) => sum + value * b[axis], 0);
+  const cross = (a, b) => [
+    a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]
+  ];
+  const unit = a => mul(a, 1 / Math.hypot(...a));
+  const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+  const vertexSource = `
+    attribute vec3 aPosition, aNormal;
+    attribute float aMaterial;
+    uniform vec3 uRight, uUp;
+    uniform mediump vec3 uEye;
+    uniform vec2 uHalfSize;
+    uniform float uCenter;
+    varying mediump vec3 vPosition, vNormal;
+    varying mediump float vMaterial;
+    void main() {
+      vec3 point = aPosition - vec3(0.0, uCenter, 0.0);
+      gl_Position = vec4(dot(point, uRight) / uHalfSize.x, dot(point, uUp) / uHalfSize.y,
+        -dot(point, uEye) / 1250.0, 1.0);
+      vPosition = aPosition;
+      vNormal = aNormal;
+      vMaterial = aMaterial;
+    }`;
+  const fragmentSource = `
+    precision mediump float;
+    uniform int uMode;
+    uniform vec3 uEye;
+    varying vec3 vPosition, vNormal;
+    varying float vMaterial;
+    void main() {
+      vec3 n = normalize(vNormal);
+      vec3 light = normalize(vec3(-0.65, 0.82, 0.50));
+      float direct = max(0.0, dot(n, light));
+      float rim = pow(1.0 - clamp(abs(dot(n, uEye)), 0.0, 1.0), 2.0);
+      float shine = pow(max(0.0, dot(n, normalize(light + uEye))), 18.0);
+      float y = clamp(vPosition.y / 454.0, 0.0, 1.0);
+      vec3 neon = mix(vec3(0.27, 0.83, 0.92), vec3(0.59, 0.59, 0.97), smoothstep(0.0, 0.62, y));
+      neon = mix(neon, vec3(1.0, 0.64, 0.71), smoothstep(0.58, 1.0, y));
+      if (vMaterial > 13.5) {
+        gl_FragColor = vec4(mix(neon, vec3(1.0), 0.42), 1.0);
+        return;
+      }
+      vec3 color;
+      if (uMode == 1) {
+        if (vMaterial < 0.5) color = vec3(0.72, 0.79, 0.81);
+        else if (vMaterial < 1.5) color = vec3(0.57, 0.64, 0.67);
+        else if (vMaterial < 2.5) color = vec3(0.47, 0.54, 0.57);
+        else if (vMaterial < 3.5) color = vec3(0.65, 0.72, 0.73);
+        else if (vMaterial < 4.5) color = vec3(0.34, 0.49, 0.55) + rim * 0.13;
+        else if (vMaterial < 5.5) color = vec3(0.79, 0.28, 0.22);
+        else if (vMaterial < 6.5) color = vec3(0.47, 0.60, 0.65);
+        else if (vMaterial < 7.5) color = vec3(0.64, 0.74, 0.76);
+        else if (vMaterial < 8.5) color = vec3(0.98, 0.54, 0.36);
+        else if (vMaterial < 9.5) color = vec3(0.52, 0.53, 0.51);
+        else if (vMaterial < 10.5) color = vec3(0.77, 0.78, 0.72);
+        else if (vMaterial < 11.5) color = vec3(0.41, 0.63, 0.72) + rim * 0.2 + shine * 0.38;
+        else if (vMaterial < 12.5) color = vec3(0.59, 0.66, 0.68);
+        else color = vec3(0.66, 0.69, 0.65);
+        color *= 0.68 + 0.39 * direct;
+        color += 0.14 * shine;
+      } else if (uMode == 2) {
+        if (vMaterial < 0.5) color = vec3(0.66, 0.97, 0.88);
+        else if (vMaterial < 1.5) color = vec3(0.39, 0.87, 0.74);
+        else if (vMaterial < 2.5) color = vec3(0.44, 0.63, 0.64);
+        else if (vMaterial < 3.5) color = vec3(0.61, 0.81, 0.76);
+        else if (vMaterial < 4.5) color = vec3(0.31, 0.52, 0.55);
+        else if (vMaterial < 5.5) color = vec3(0.99, 0.72, 0.49);
+        else if (vMaterial < 6.5) color = vec3(0.17, 0.29, 0.27);
+        else if (vMaterial < 7.5) color = vec3(0.31, 0.51, 0.45);
+        else if (vMaterial < 8.5) color = vec3(1.0, 0.77, 0.53);
+        else if (vMaterial < 9.5) color = vec3(0.67, 0.59, 0.46);
+        else if (vMaterial < 10.5) color = vec3(0.66, 0.75, 0.66);
+        else if (vMaterial < 11.5) color = vec3(0.39, 0.68, 0.73) + rim * 0.14;
+        else if (vMaterial < 12.5) color = vec3(0.88, 0.65, 0.42);
+        else color = vec3(0.99, 0.78, 0.48);
+        color *= 0.66 + 0.34 * direct;
+        color += 0.1 * shine + 0.1 * rim;
+      } else {
+        if (vMaterial < 0.5) color = neon * 0.98;
+        else if (vMaterial < 1.5) color = neon * 0.69;
+        else if (vMaterial < 2.5) color = neon * 0.54;
+        else if (vMaterial < 3.5) color = vec3(0.88, 0.82, 0.86);
+        else if (vMaterial < 4.5) color = mix(vec3(0.11, 0.22, 0.32), neon, 0.13) + rim * 0.09;
+        else if (vMaterial < 5.5) color = vec3(0.99, 0.44, 0.38);
+        else if (vMaterial < 6.5) color = vec3(0.14, 0.21, 0.30);
+        else if (vMaterial < 7.5) color = vec3(0.30, 0.48, 0.59);
+        else if (vMaterial < 8.5) color = vec3(1.0, 0.77, 0.61);
+        else if (vMaterial < 9.5) color = vec3(0.19, 0.24, 0.31);
+        else if (vMaterial < 10.5) color = vec3(0.37, 0.41, 0.48);
+        else if (vMaterial < 11.5) color = vec3(0.37, 0.63, 0.79) + rim * 0.16 + shine * 0.35;
+        else if (vMaterial < 12.5) color = vec3(0.49, 0.43, 0.40);
+        else color = vec3(0.66, 0.53, 0.43);
+        color *= 0.77 + 0.25 * direct;
+        color += 0.11 * shine + 0.08 * rim;
+      }
+      gl_FragColor = vec4(color, 1.0);
+    }`;
+
+  function compile(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+    return shader;
+  }
+
+  const program = gl.createProgram();
+  gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  gl.useProgram(program);
+  const attributes = ["aPosition", "aNormal", "aMaterial"].map(name => gl.getAttribLocation(program, name));
+  const uniforms = Object.fromEntries(
+    ["uRight", "uUp", "uEye", "uHalfSize", "uCenter", "uMode"].map(name => [name, gl.getUniformLocation(program, name)])
+  );
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0, 0, 0, 0);
+
+  const material = {
+    column: 0, ring: 1, brace: 2, steel: 3, glass: 4, red: 5, base: 6, paving: 7, lamp: 8,
+    concrete: 9, deck: 10, cabin: 11, connector: 12, stair: 13, nodeLight: 14
+  };
+  let vertices = [];
+
+  function vertex(point, normal, finish) {
+    vertices.push(...point, ...normal, finish);
+  }
+
+  function tube(from, to, radiusFrom, radiusTo, finish, sides = 7, caps = false) {
+    const axis = unit(sub(to, from));
+    const right = unit(cross(axis, Math.abs(axis[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]));
+    const up = cross(axis, right);
+    for (let i = 0; i < sides; i += 1) {
+      const a = TAU * i / sides;
+      const b = TAU * (i + 1) / sides;
+      const n0 = add(mul(right, Math.cos(a)), mul(up, Math.sin(a)));
+      const n1 = add(mul(right, Math.cos(b)), mul(up, Math.sin(b)));
+      const p0 = add(from, mul(n0, radiusFrom));
+      const p1 = add(from, mul(n1, radiusFrom));
+      const q0 = add(to, mul(n0, radiusTo));
+      const q1 = add(to, mul(n1, radiusTo));
+      vertex(p0, n0, finish); vertex(p1, n1, finish); vertex(q1, n1, finish);
+      vertex(p0, n0, finish); vertex(q1, n1, finish); vertex(q0, n0, finish);
+      if (caps) {
+        const bottomNormal = mul(axis, -1);
+        vertex(from, bottomNormal, finish); vertex(p1, bottomNormal, finish); vertex(p0, bottomNormal, finish);
+        vertex(to, axis, finish); vertex(q0, axis, finish); vertex(q1, axis, finish);
+      }
+    }
+  }
+
+  function loop(sample, count, radius, finish, sides = 6) {
+    for (let i = 0; i < count; i += 1) {
+      tube(sample(TAU * i / count), sample(TAU * (i + 1) / count), radius, radius, finish, sides);
+    }
+  }
+
+  function saveMesh() {
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    const mesh = { buffer, count: vertices.length / 7 };
+    vertices = [];
+    return mesh;
+  }
+
+  function ellipse(angle, major, minor, spin, height, centerX = 0, centerZ = 0) {
+    const x = major * Math.cos(angle);
+    const z = minor * Math.sin(angle);
+    return [centerX + x * Math.cos(spin) - z * Math.sin(spin), height, centerZ + x * Math.sin(spin) + z * Math.cos(spin)];
+  }
+
+  const foundationHeight = -10;
+  const ringAngle = 15.5 * Math.PI / 180;
+  const roofDirection = 3 * Math.PI / 4;
+  const jointPhase = -7 * Math.PI / 180;
+  const step = TAU / columnCount;
+  const plane = [Math.cos(roofDirection) * Math.tan(ringAngle), 0, Math.sin(roofDirection) * Math.tan(ringAngle)];
+  const lowerCenter = [-4, foundationHeight, 2.6];
+  const upperCenter = [1.2, towerHeight, -0.9];
+
+  function columnLine(angle) {
+    const foot = ellipse(angle, 40, 25, 0, foundationHeight, lowerCenter[0], lowerCenter[2]);
+    // The angular correspondence is fitted to the measured section at 280 m.
+    const top = ellipse(angle + jointPhase, 27, 20.25, roofDirection, towerHeight, upperCenter[0], upperCenter[2]);
+    return [foot, top];
+  }
+
+  function horizontalPoint(angle, height) {
+    const t = (height - foundationHeight) / (towerHeight - foundationHeight);
+    return mix(...columnLine(angle), t);
+  }
+
+  function tiltedPoint(angle, elevation) {
+    const [foot, top] = columnLine(angle);
+    const axis = sub(top, foot);
+    const t = (elevation - foot[1] + dot(foot, plane)) / (axis[1] - dot(axis, plane));
+    return add(foot, mul(axis, t));
+  }
+
+  // Intersect every straight column with the same family of tilted ring planes.
+  const spacing = Array.from({ length: ringCount - 1 }, (_, index) => {
+    const distance = (index + 0.5) / (ringCount - 1) - 0.60;
+    return 8.5 + 12 * distance * distance;
+  });
+  const heightPerUnit = towerHeight / spacing.reduce((sum, gap) => sum + gap, 0);
+  const levels = [0];
+  for (const gap of spacing) levels.push(levels.at(-1) + gap * heightPerUnit);
+  const joints = levels.map(level => Array.from({ length: columnCount }, (_, i) => tiltedPoint(i * step, level)));
+  for (let column = 0; column < columnCount; column += 1) {
+    const start = horizontalPoint(column * step, -0.7);
+    const end = joints.at(-1)[column];
+    tube(start, end, 1.0, 0.60, material.column, 10, true);
+  }
+  for (const [row, ring] of joints.entries()) {
+    for (let column = 0; column < columnCount; column += 1) {
+      const next = (column + 1) % columnCount;
+      tube(ring[column], ring[next], 0.40, 0.40, material.ring, 7);
+      if (row === joints.length - 1) continue;
+      const reverse = row % 2;
+      tube(ring[reverse ? next : column], joints[row + 1][reverse ? column : next],
+        0.35, 0.35, material.brace, 6);
+    }
+  }
+  const lattice = saveMesh();
+
+  for (const ring of joints.slice(1)) {
+    for (const joint of ring) {
+      const center = mix(lowerCenter, upperCenter, (joint[1] - foundationHeight) / (towerHeight - foundationHeight));
+      const out = unit([joint[0] - center[0], 0, joint[2] - center[2]]);
+      const side = 1.11 - clamp(joint[1] / towerHeight, 0, 1) * 0.40;
+      tube(add(joint, mul(out, side - 0.27)), add(joint, mul(out, side)), 0.28, 0.28, material.nodeLight, 5, true);
+    }
+  }
+  const lighting = saveMesh();
+
+  function sectionSurface(lower, upper, segments, finish, caps = true) {
+    const lowCenter = mul(add(lower(0), lower(Math.PI)), 0.5);
+    const highCenter = mul(add(upper(0), upper(Math.PI)), 0.5);
+    const up = unit(cross(sub(upper(Math.PI / 2), highCenter), sub(upper(0), highCenter)));
+    for (let i = 0; i < segments; i += 1) {
+      const a = TAU * i / segments;
+      const b = TAU * (i + 1) / segments;
+      const p0 = lower(a);
+      const p1 = lower(b);
+      const q0 = upper(a);
+      const q1 = upper(b);
+      const n0 = unit([p0[0] - lowCenter[0], 0, p0[2] - lowCenter[2]]);
+      const n1 = unit([p1[0] - lowCenter[0], 0, p1[2] - lowCenter[2]]);
+      vertex(p0, n0, finish); vertex(q1, n1, finish); vertex(p1, n1, finish);
+      vertex(p0, n0, finish); vertex(q0, n0, finish); vertex(q1, n1, finish);
+      if (caps) {
+        vertex(highCenter, up, finish); vertex(q1, up, finish); vertex(q0, up, finish);
+      }
+    }
+  }
+
+  function innerProfile(height, scale) {
+    const t = (height - foundationHeight) / (towerHeight - foundationHeight);
+    const center = mix(lowerCenter, upperCenter, t);
+    return angle => mix(center, horizontalPoint(angle, height), scale);
+  }
+
+  const coreDirection = 72 * Math.PI / 180;
+  function corePoint(angle, height, clearance = 0) {
+    return ellipse(angle, 9.3 + clearance, 7.8 + clearance, coreDirection, height);
+  }
+  sectionSurface(a => corePoint(a, -0.5), a => corePoint(a, 448), 48, material.concrete);
+  const core = saveMesh();
+
+  // Published A–E occupied zones. The subdivisions and facade setbacks are illustrative.
+  const zones = [
+    { low: 0, high: 32.8, levels: 6, start: 0.76, end: 0.77, panels: 48 },
+    { low: 84.8, high: 116, levels: 6, start: 0.80, end: 0.87, panels: 48 },
+    { low: 147.2, high: 168, levels: 4, start: 0.83, end: 0.87, panels: 36 },
+    { low: 334.4, high: 355.2, levels: 4, start: 0.85, end: 0.83, panels: 36 },
+    { low: 376, high: 443.4, levels: 17, start: 0.79, end: 0.91, panels: 48, crown: true }
+  ];
+  function zoneProfile(zone, fraction, extra = 0) {
+    const elevation = zone.low + (zone.high - zone.low) * fraction;
+    const setback = zone.start + (zone.end - zone.start) * fraction;
+    return innerProfile(elevation, setback + extra);
+  }
+
+  for (const zone of zones) {
+    const lower = zoneProfile(zone, 0);
+    const upper = zone.crown ? slopedRoof(446.95, 0.919) : zoneProfile(zone, 1);
+    sectionSurface(lower, upper, zone.panels, material.glass, false);
+    for (let panel = 0; panel < zone.panels; panel += 1) {
+      const angle = TAU * panel / zone.panels;
+      tube(lower(angle), upper(angle), 0.11, 0.11, material.steel, 5);
+    }
+  }
+  const facade = saveMesh();
+
+  for (const zone of zones) {
+    for (let index = 0; index <= zone.levels; index += 1) {
+      const fraction = index / zone.levels;
+      const elevation = zone.low + (zone.high - zone.low) * fraction;
+      const profile = zoneProfile(zone, fraction, 0.018);
+      const edge = index === 0 || index === zone.levels;
+      sectionSurface(a => add(profile(a), [0, edge ? -0.70 : -0.34, 0]), profile, 36, material.deck);
+      if (edge) loop(profile, 36, 0.22, material.steel, 5);
+      if (index % 2 !== 0) continue;
+      for (let column = 0; column < columnCount; column += 1) {
+        const angle = column * step;
+        const joint = horizontalPoint(angle, Math.max(0.15, elevation - 0.70));
+        const axis = Math.atan2(joint[2], joint[0]) - coreDirection;
+        const root = corePoint(axis, joint[1] + 0.55);
+        tube(root, joint, 0.31, 0.31, material.connector, 4);
+      }
+    }
+  }
+  const floors = saveMesh();
+
+  function quad(a, b, c, d, finish) {
+    const normal = unit(cross(sub(b, a), sub(c, a)));
+    vertex(a, normal, finish); vertex(b, normal, finish); vertex(c, normal, finish);
+    vertex(a, normal, finish); vertex(c, normal, finish); vertex(d, normal, finish);
+  }
+
+  // Skywalk treads and rails follow two open stair sections around the straight core.
+  function stairs(start, end, revolutions, turnOffset) {
+    const steps = Math.round((end - start) / 0.20);
+    const at = (index, side, raise = 0) => corePoint(
+      turnOffset + TAU * revolutions * index / steps, start + (end - start) * index / steps + raise, side
+    );
+    let previous = 0;
+    for (let index = 0; index < steps; index += 1) {
+      const inside = at(index, 0.25);
+      const outside = at(index, 1.28);
+      const nextInside = at(index + 1, 0.25);
+      const nextOutside = at(index + 1, 1.28);
+      const lipIn = [nextInside[0], inside[1], nextInside[2]];
+      const lipOut = [nextOutside[0], inside[1], nextOutside[2]];
+      quad(inside, lipIn, lipOut, outside, material.stair);
+      quad(lipIn, nextInside, nextOutside, lipOut, material.stair);
+      if (index % 6 !== 0 && index !== steps - 1) continue;
+      const next = index + 1;
+      const post = at(next, 1.28);
+      const handrail = at(next, 1.28, 1.04);
+      tube(post, handrail, 0.07, 0.07, material.stair, 5);
+      tube(at(previous, 1.28, 1.04), handrail, 0.08, 0.08, material.steel, 5);
+      previous = next;
+    }
+  }
+  stairs(178.4, 272, 2.70, 0.4);
+  stairs(287.6, 318.8, 0.90, 2.4);
+  for (const height of [178.4, 272, 287.6, 318.8]) {
+    const band = angle => corePoint(angle, height, 1.35);
+    sectionSurface(angle => add(band(angle), [0, -0.35, 0]), band, 36, material.stair);
+    loop(angle => add(band(angle), [0, 0.85, 0]), 36, 0.09, material.steel, 5);
+  }
+  const skywalk = saveMesh();
+
+  function slopedRoof(elevation, scale) {
+    return angle => {
+      const point = tiltedPoint(angle, elevation);
+      const x = upperCenter[0] + (point[0] - upperCenter[0]) * scale;
+      const z = upperCenter[2] + (point[2] - upperCenter[2]) * scale;
+      return [x, elevation + dot([x, 0, z], plane), z];
+    };
+  }
+
+  const roofEdge = slopedRoof(450, 0.91);
+  sectionSurface(slopedRoof(446.9, 0.92), roofEdge, 64, material.deck);
+  for (const height of [0.35, 1.30]) {
+    loop(angle => add(roofEdge(angle), [0, height, 0]), 64, 0.10, material.steel, 6);
+  }
+  for (let i = 0; i < 64; i += 1) {
+    const foot = roofEdge(TAU * i / 64);
+    tube(foot, add(foot, [0, 1.30, 0]), 0.085, 0.085, material.steel, 5);
+  }
+
+  const track = slopedRoof(454.8, 1.015);
+  for (const radius of [0.979, 1.035]) loop(slopedRoof(454.8, radius), 64, 0.20, material.steel);
+  for (let i = 0; i < 32; i += 1) {
+    const angle = TAU * i / 32;
+    tube(roofEdge(angle), track(angle), 0.22, 0.18, material.connector, 5);
+  }
+
+  function cabinShell(center) {
+    function sample(angle, latitude) {
+      const normal = [Math.cos(angle) * Math.cos(latitude), Math.sin(latitude), Math.sin(angle) * Math.cos(latitude)];
+      return { point: add(center, mul(normal, 1.6)), normal };
+    }
+    function place(sampled) { vertex(sampled.point, sampled.normal, material.cabin); }
+    for (let latitude = 0; latitude < 8; latitude += 1) {
+      const low = Math.PI * (latitude / 8 - 0.5);
+      const high = Math.PI * ((latitude + 1) / 8 - 0.5);
+      for (let sector = 0; sector < 16; sector += 1) {
+        const start = TAU * sector / 16;
+        const end = TAU * (sector + 1) / 16;
+        const a = sample(start, low), b = sample(end, low), c = sample(end, high), d = sample(start, high);
+        place(a); place(b); place(c);
+        place(a); place(c); place(d);
+      }
+    }
+    loop(angle => add(center, [Math.cos(angle) * 1.60, 0, Math.sin(angle) * 1.60]), 20, 0.092, material.steel, 5);
+    loop(angle => add(center, [Math.cos(angle) * 1.60, Math.sin(angle) * 1.60, 0]), 20, 0.092, material.steel, 5);
+  }
+
+  for (let i = 0; i < 16; i += 1) {
+    const point = track(TAU * (i + 0.25) / 16);
+    tube(add(point, [0, 0.13, 0]), add(point, [0, 0.67, 0]), 1.10, 1.27, material.red, 12, true);
+    cabinShell(add(point, [0, 1.96, 0]));
+  }
+
+  function mastPoint(height) { return [0.35, height, -0.40]; }
+  function mastJoint(angle, height, radius) {
+    return add(mastPoint(height), [Math.cos(angle) * radius, 0, Math.sin(angle) * radius]);
+  }
+
+  const latticeMast = [[451, 6.15], [458, 5.82], [465, 5.50], [472, 5.18], [479, 4.86], [486, 4.54],
+    [493, 4.22], [500, 3.90], [507, 3.59], [514, 3.27], [521, 2.98], [528, 2.65], [535, 2.33], [542, 2.05]];
+  for (let row = 0; row < latticeMast.length - 1; row += 1) {
+    const [lower, lowRadius] = latticeMast[row];
+    const [upper, highRadius] = latticeMast[row + 1];
+    const paint = Math.floor(row / 2) % 2 ? material.red : material.steel;
+    for (let side = 0; side < 8; side += 1) {
+      const angle = TAU * side / 8 + Math.PI / 8;
+      const next = angle + TAU / 8;
+      const bottom = mastJoint(angle, lower, lowRadius);
+      const top = mastJoint(angle, upper, highRadius);
+      const adjacent = mastJoint(next, upper, highRadius);
+      tube(bottom, top, 0.41 - row * 0.014, 0.39 - row * 0.014, paint, 7);
+      tube(top, adjacent, 0.21, 0.21, paint, 5);
+      const brace = row % 2 ? mastJoint(next, lower, lowRadius) : bottom;
+      tube(brace, row % 2 ? top : adjacent, 0.18, 0.18, paint, 5);
+    }
+  }
+  const mastTip = [[542, 2.03, 8], [551, 1.83, 8], [562, 1.50, 8], [574, 1.17, 8], [585, 0.83, 4], [595, 0.54, 4], [599, 0.34, 4]];
+  for (let i = 0; i < mastTip.length - 1; i += 1) {
+    const [low, lowRadius, sides] = mastTip[i];
+    const [high, highRadius] = mastTip[i + 1];
+    tube(mastPoint(low), mastPoint(high), lowRadius, highRadius, i % 2 ? material.red : material.steel, sides, true);
+  }
+  tube(mastPoint(596), mastPoint(600), 0.38, 0.28, material.lamp, 8, true);
+
+  tube(mastPoint(486.8), mastPoint(488), 7.1, 7.8, material.deck, 32, true);
+  loop(angle => mastJoint(angle, 489.2, 7.60), 32, 0.13, material.steel, 6);
+  for (let i = 0; i < 24; i += 1) {
+    const angle = TAU * i / 24;
+    tube(mastJoint(angle, 488, 7.60), mastJoint(angle, 489.2, 7.60), 0.075, 0.075, material.steel, 5);
+    if (i % 3 === 0) tube(mastJoint(angle, 482.5, 4.7), mastJoint(angle, 487, 7.0), 0.29, 0.26, material.steel, 5);
+  }
+  for (const side of [0, Math.PI]) {
+    const angle = side + 0.2;
+    for (const direction of [-0.10, 0.10]) {
+      tube(mastJoint(angle + direction, 455.5, 6.80), mastJoint(angle + direction, 484.5, 6.50), 0.22, 0.22, material.steel, 6);
+    }
+    tube(mastJoint(angle - 0.15, 465, 6.62), mastJoint(angle + 0.15, 465, 6.62), 0.58, 0.58, material.red, 4, true);
+  }
+  const crown = saveMesh();
+
+  tube([0, -8, 0], [0, -3, 0], 66, 66, material.base, 96, true);
+  tube([0, -3, 0], [0, -0.65, 0], 62, 58, material.base, 96, true);
+  for (const radius of [59, 65, 73, 92, 118]) {
+    const height = radius <= 65 ? -2 : -8.35;
+    loop(angle => ellipse(angle, radius, radius, 0, height), 96, radius <= 65 ? 0.38 : 0.23, material.paving, 5);
+  }
+  for (let i = 0; i < 48; i += 1) {
+    const angle = TAU * i / 48;
+    const length = i % 4 === 0 ? 5 : 2;
+    tube(ellipse(angle, 94, 94, 0, -8.35), ellipse(angle, 94 + length, 94 + length, 0, -8.35),
+      0.32, 0.32, material.paving, 5);
+  }
+  const plinth = saveMesh();
+
+  function draw(mesh) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buffer);
+    attributes.forEach((location, i) => {
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, i === 2 ? 1 : 3, gl.FLOAT, false, 28, [0, 12, 24][i]);
+    });
+    gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+  }
+
+  const rotationButton = document.querySelector("#rotate");
+  const zoomInButton = document.querySelector("#zoom-in");
+  const zoomOutButton = document.querySelector("#zoom-out");
+  const modeButtons = [...document.querySelectorAll("button[data-mode]")];
+  const viewButtons = [...document.querySelectorAll("button[data-view]")];
+  const ticks = [...document.querySelectorAll(".tick")];
+  const landmarks = [...document.querySelectorAll(".landmark")];
+  const presets = {
+    overview: { yaw: -0.62, pitch: 0.16, zoom: 1, center: 298 },
+    waist: { yaw: -0.28, pitch: 0.12, zoom: 3.03, center: 256 },
+    top: { yaw: 0.48, pitch: 0.36, zoom: 5.15, center: 462 }
+  };
+  const view = { ...presets.overview };
+  let activeView = "overview";
+  let mode = 0;
+  let auto = false;
+  let frame = 0;
+  let lastFrame = 0;
+  let width = 1;
+  let height = 1;
+  let halfHeight = 1;
+  const minZoom = 0.72;
+  const maxZoom = 7.5;
+
+  function requestDraw() {
+    if (!frame) frame = requestAnimationFrame(render);
+  }
+
+  function render(time) {
+    frame = 0;
+    if (auto && lastFrame) view.yaw += Math.min(time - lastFrame, 50) * 0.00032;
+    lastFrame = time;
+    const sy = Math.sin(view.yaw), cy = Math.cos(view.yaw);
+    const sp = Math.sin(view.pitch), cp = Math.cos(view.pitch);
+    const right = [cy, 0, -sy];
+    const up = [-sy * sp, cp, -cy * sp];
+    const eye = [sy * cp, sp, cy * cp];
+    const halfWidth = halfHeight * width / height;
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.uniform3fv(uniforms.uRight, right);
+    gl.uniform3fv(uniforms.uUp, up);
+    gl.uniform3fv(uniforms.uEye, eye);
+    gl.uniform2f(uniforms.uHalfSize, halfWidth, halfHeight);
+    gl.uniform1f(uniforms.uCenter, view.center);
+    gl.uniform1i(uniforms.uMode, mode);
+    draw(plinth);
+    draw(core);
+    draw(floors);
+    if (mode !== 2) draw(facade);
+    draw(skywalk);
+    draw(lattice);
+    draw(crown);
+    if (mode === 0) draw(lighting);
+
+    function project(point) {
+      const mapped = sub(point, [0, view.center, 0]);
+      return [(1 + dot(mapped, right) / halfWidth) * width / 2, (1 - dot(mapped, up) / halfHeight) * height / 2];
+    }
+    function placeLabel(element, x, y, rightMargin, bottomMargin) {
+      const visible = y > 65 && y < height - bottomMargin && x < width - rightMargin;
+      element.hidden = !visible;
+      if (visible) element.style.transform = `translate(${x}px, ${y}px) translateY(-50%)`;
+    }
+    for (const tick of ticks) {
+      const [, y] = project([0, Number(tick.dataset.height), 0]);
+      placeLabel(tick, 0, y, 60, 45);
+    }
+    for (const landmark of landmarks) {
+      if (!landmark.dataset.view.split(" ").includes(activeView)) {
+        landmark.hidden = true;
+        continue;
+      }
+      const elevation = Number(landmark.dataset.height);
+      const part = landmark.dataset.part;
+      const profile = part === "roof" ? roofEdge
+        : part === "mast" ? angle => mastJoint(angle, elevation, elevation === 488 ? 7.8 : 1.5)
+        : angle => horizontalPoint(angle, elevation);
+      let edge = [-Infinity, 0];
+      for (let i = 0; i < columnCount; i += 1) {
+        const point = project(profile(i * step));
+        if (point[0] > edge[0]) edge = point;
+      }
+      placeLabel(landmark, edge[0] + 12, edge[1], 148, 58);
+    }
+    if (auto) requestDraw();
+  }
+
+  function resize() {
+    width = canvas.clientWidth;
+    height = canvas.clientHeight;
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(width * pixelRatio));
+    canvas.height = Math.max(1, Math.round(height * pixelRatio));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    updateView();
+  }
+
+  function updateView() {
+    let frameHeight = height < 575 ? 417 : 377;
+    if (activeView === "top") frameHeight = Math.max(frameHeight, 150 * height / width);
+    halfHeight = frameHeight / view.zoom;
+    zoomInButton.disabled = view.zoom >= maxZoom;
+    zoomOutButton.disabled = view.zoom <= minZoom;
+    requestDraw();
+  }
+
+  function setAuto(next) {
+    auto = next;
+    lastFrame = 0;
+    rotationButton.setAttribute("aria-pressed", String(auto));
+    requestDraw();
+  }
+
+  function setPreset(preset) {
+    activeView = preset;
+    stage.dataset.view = preset;
+    Object.assign(view, presets[preset]);
+    for (const button of viewButtons) button.setAttribute("aria-pressed", String(button.dataset.view === preset));
+    setAuto(false);
+    updateView();
+  }
+  function resetView() { setPreset("overview"); }
+
+  function zoomBy(factor, anchorY = height / 2) {
+    const previousZoom = view.zoom;
+    view.zoom = clamp(previousZoom * factor, minZoom, maxZoom);
+    const offset = (1 - 2 * anchorY / height) * halfHeight / Math.cos(view.pitch);
+    view.center = clamp(view.center + offset * (1 - previousZoom / view.zoom), -40, 645);
+    updateView();
+  }
+
+  function orbit(dx, dy) {
+    view.yaw += dx * 0.008;
+    view.pitch = clamp(view.pitch + dy * 0.006, -0.55, 0.73);
+    requestDraw();
+  }
+
+  for (const [index, button] of modeButtons.entries()) {
+    button.addEventListener("click", () => {
+      mode = index;
+      stage.dataset.mode = button.dataset.mode;
+      for (const choice of modeButtons) choice.setAttribute("aria-pressed", String(choice === button));
+      requestDraw();
+    });
+  }
+  rotationButton.addEventListener("click", () => setAuto(!auto));
+  for (const button of viewButtons) button.addEventListener("click", () => setPreset(button.dataset.view));
+  document.querySelector("#reset").addEventListener("click", resetView);
+  zoomInButton.addEventListener("click", () => zoomBy(1.22));
+  zoomOutButton.addEventListener("click", () => zoomBy(1 / 1.22));
+
+  const pointers = new Map();
+  canvas.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || pointers.size >= 2) return;
+    canvas.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, [event.clientX, event.clientY]);
+    setAuto(false);
+  });
+  canvas.addEventListener("pointermove", event => {
+    const previous = pointers.get(event.pointerId);
+    if (!previous) return;
+    const point = [event.clientX, event.clientY];
+    pointers.set(event.pointerId, point);
+    if (pointers.size === 1) {
+      const dx = point[0] - previous[0];
+      orbit(event.pointerType === "mouse" ? -dx : dx, point[1] - previous[1]);
+      return;
+    }
+    const other = [...pointers.entries()].find(([id]) => id !== event.pointerId)[1];
+    const previousDistance = Math.hypot(...sub(previous, other));
+    if (previousDistance > 0) {
+      const anchorY = (point[1] + other[1]) / 2 - canvas.getBoundingClientRect().top;
+      zoomBy(Math.hypot(...sub(point, other)) / previousDistance, anchorY);
+    }
+  });
+  for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    canvas.addEventListener(name, event => pointers.delete(event.pointerId));
+  }
+  canvas.addEventListener("wheel", event => {
+    event.preventDefault();
+    const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? height : 1;
+    const anchorY = event.clientY - canvas.getBoundingClientRect().top;
+    zoomBy(Math.exp(clamp(-event.deltaY * multiplier * 0.0014, -1, 1)), anchorY);
+  }, { passive: false });
+  canvas.addEventListener("keydown", event => {
+    const shortcuts = {
+      ArrowLeft: () => orbit(-16, 0), ArrowRight: () => orbit(16, 0),
+      ArrowUp: () => orbit(0, -11), ArrowDown: () => orbit(0, 11),
+      "+": () => zoomBy(1.22), "=": () => zoomBy(1.22), "-": () => zoomBy(1 / 1.22), Home: resetView
+    };
+    if (!Object.hasOwn(shortcuts, event.key)) return;
+    event.preventDefault();
+    shortcuts[event.key]();
+  });
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+  resize();
+}
+
+let gl;
+function init() {
+  try {
+    gl = canvas.getContext("webgl", { alpha: true, antialias: true });
+    if (!gl) {
+      showError("当前浏览器无法启用 WebGL。请在支持 WebGL 的浏览器中打开此文件。");
+      return;
+    }
+    startViewer(gl);
+  } catch (error) {
+    console.error(error);
+    showError("三维模型加载失败，请刷新页面重试。");
+  }
+}
+canvas.addEventListener("webglcontextlost", () => showError("三维渲染已中断，请刷新页面重试。"));
+init();
+</script>
+</body>
+</html>
